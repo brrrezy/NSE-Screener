@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pandas
+yfinance
+ta
+openpyxl
+requests
+tqdm
+numpy
+python-multipart
