@@ -1,4 +1,4 @@
-# 🚀 NSE Swing Screener: Institutional Terminal
+# 🚀 NSE Swing Screener
 
 An institutional-grade quantitative screening terminal for the **National Stock Exchange (NSE) of India**. Designed for hyper-speed analysis, predicting high-probability swing setups using state-of-the-art technical models.
 
