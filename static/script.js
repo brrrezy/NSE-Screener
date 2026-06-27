@@ -44,9 +44,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 `).join('');
                 suggestionsDiv.classList.add('active');
                 
-                // Add click events
+                // Add mousedown events to prevent input blur closing before select registers
                 suggestionsDiv.querySelectorAll('.suggestion-item').forEach(item => {
-                    item.addEventListener('click', () => {
+                    item.addEventListener('mousedown', (event) => {
+                        event.preventDefault(); // Prevent input focus loss
                         selectSuggestion(item.getAttribute('data-symbol'));
                     });
                 });
