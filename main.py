@@ -20,7 +20,11 @@ async def scan_stocks(
     interval: str = Query("1d"),
     top_n: int = Query(10, ge=5, le=50),
     start_index: int = Query(0, ge=0),
-    symbol: str = Query(None)
+    symbol: str = Query(None),
+    minervini: bool = Query(False),
+    vcp: bool = Query(False),
+    sfp: bool = Query(False),
+    ipo: bool = Query(False)
 ):
     try:
         # Run the screener
@@ -32,7 +36,11 @@ async def scan_stocks(
             interval=interval,
             top_n=top_n,
             start_index=start_index,
-            manual_symbols=manual_list
+            manual_symbols=manual_list,
+            filter_minervini=minervini,
+            filter_vcp=vcp,
+            filter_sfp=sfp,
+            filter_ipo=ipo
         )
         
         summary = getattr(top_df, "attrs", {}).get("summary", {})
@@ -68,11 +76,14 @@ async def download_excel():
 @app.get("/api/tickers")
 async def search_tickers(q: str = Query("")):
     try:
-        from swing_screener import get_nse_stocks
-        stocks = get_nse_stocks()
+        from swing_screener import get_nse_stocks_rich
+        stocks = get_nse_stocks_rich()
         q = q.upper()
-        # Filter stocks that start with the query
-        results = [s for s in stocks if q in s][:10]
+        # Filter stocks that start with the query symbol OR contain the query in the company name
+        results = [
+            s for s in stocks 
+            if q in s["symbol"].upper() or q in s["name"].upper()
+        ][:10]
         return JSONResponse(content={"results": results})
     except Exception as e:
         return JSONResponse(content={"results": []})

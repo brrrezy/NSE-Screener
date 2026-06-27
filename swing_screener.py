@@ -37,18 +37,29 @@ class FundamentalCache:
         self._init_db()
 
     def _init_db(self):
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS fundamentals (
-                    symbol TEXT PRIMARY KEY,
-                    data TEXT,
-                    updated_at TIMESTAMP
-                )
-            """)
+        try:
+            with sqlite3.connect(self.db_path, timeout=30.0) as conn:
+                conn.execute("PRAGMA journal_mode=WAL;")
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS fundamentals (
+                        symbol TEXT PRIMARY KEY,
+                        data TEXT,
+                        updated_at TIMESTAMP
+                    )
+                """)
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS ipo_dates (
+                        symbol TEXT PRIMARY KEY,
+                        first_trade_epoch INTEGER,
+                        updated_at TIMESTAMP
+                    )
+                """)
+        except Exception:
+            pass
 
     def get(self, symbol: str, ttl_days: int = 7) -> Optional[Dict[str, Any]]:
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=30.0) as conn:
                 cursor = conn.execute(
                     "SELECT data, updated_at FROM fundamentals WHERE symbol = ?", 
                     (symbol,)
@@ -65,10 +76,34 @@ class FundamentalCache:
 
     def set(self, symbol: str, data: Dict[str, Any]):
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=30.0) as conn:
                 conn.execute(
                     "INSERT OR REPLACE INTO fundamentals (symbol, data, updated_at) VALUES (?, ?, ?)",
                     (symbol, json.dumps(data), dt.datetime.now().isoformat())
+                )
+        except Exception:
+            pass
+
+    def get_ipo_epoch(self, symbol: str) -> Optional[int]:
+        try:
+            with sqlite3.connect(self.db_path, timeout=30.0) as conn:
+                cursor = conn.execute(
+                    "SELECT first_trade_epoch FROM ipo_dates WHERE symbol = ?",
+                    (symbol,)
+                )
+                row = cursor.fetchone()
+                if row:
+                    return row[0]
+        except Exception:
+            pass
+        return None
+
+    def set_ipo_epoch(self, symbol: str, epoch: int):
+        try:
+            with sqlite3.connect(self.db_path, timeout=30.0) as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO ipo_dates (symbol, first_trade_epoch, updated_at) VALUES (?, ?, ?)",
+                    (symbol, epoch, dt.datetime.now().isoformat())
                 )
         except Exception:
             pass
@@ -79,25 +114,48 @@ db_cache = FundamentalCache(DB_PATH)
 # 3) DATA FETCHING
 # ============================================================
 
-def get_nse_stocks(cache_ttl_hours: int = 24) -> List[str]:
+def get_nse_stocks_rich(cache_ttl_hours: int = 24) -> List[Dict[str, str]]:
     url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
     headers = {"User-Agent": "Mozilla/5.0"}
 
+    # Refresh cache if missing or expired
     if NSE_EQUITY_LIST_CACHE.exists():
         age = dt.datetime.now() - dt.datetime.fromtimestamp(NSE_EQUITY_LIST_CACHE.stat().st_mtime)
-        if age.total_seconds() < cache_ttl_hours * 3600:
-            text = NSE_EQUITY_LIST_CACHE.read_text(encoding="utf-8", errors="ignore")
-            lines = text.splitlines()
-            return [f"{l.split(',')[0].strip().strip('\"')}.NS" for l in lines[1:] if l.strip()]
+        if age.total_seconds() >= cache_ttl_hours * 3600:
+            try:
+                resp = requests.get(url, headers=headers, timeout=30)
+                resp.raise_for_status()
+                NSE_EQUITY_LIST_CACHE.write_text(resp.text, encoding="utf-8")
+            except Exception:
+                pass
+    else:
+        try:
+            resp = requests.get(url, headers=headers, timeout=30)
+            resp.raise_for_status()
+            NSE_EQUITY_LIST_CACHE.write_text(resp.text, encoding="utf-8")
+        except Exception:
+            return []
 
     try:
-        resp = requests.get(url, headers=headers, timeout=30)
-        resp.raise_for_status()
-        NSE_EQUITY_LIST_CACHE.write_text(resp.text, encoding="utf-8")
-        lines = resp.text.splitlines()
-        return [f"{l.split(',')[0].strip().strip('\"')}.NS" for l in lines[1:] if l.strip()]
+        import csv
+        import io
+        text = NSE_EQUITY_LIST_CACHE.read_text(encoding="utf-8", errors="ignore")
+        reader = csv.reader(io.StringIO(text))
+        next(reader, None) # Skip header
+        
+        results = []
+        for row in reader:
+            if len(row) >= 2:
+                results.append({
+                    "symbol": f"{row[0].strip()}.NS",
+                    "name": row[1].strip()
+                })
+        return results
     except Exception:
         return []
+
+def get_nse_stocks(cache_ttl_hours: int = 24) -> List[str]:
+    return [s["symbol"] for s in get_nse_stocks_rich(cache_ttl_hours)]
 
 def normalize_ohlcv_df(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -131,6 +189,7 @@ def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
     # Volatility
     df["atr"] = ta.volatility.average_true_range(df["High"], df["Low"], df["Close"], 14)
+    df["atr_ma20"] = df["atr"].rolling(20).mean()
     df["adrp20"] = ((df["High"] - df["Low"]).rolling(20).mean() / df["Close"]) * 100.0
 
     # CLV / Delta
@@ -143,6 +202,9 @@ def predicta_v4_confluence(latest: pd.Series) -> Tuple[int, Dict[str, bool]]:
     close, ema50, ema200 = latest.get("Close"), latest.get("ema50"), latest.get("ema200")
     trend_ok = bool(close > ema50 > ema200) if not pd.isna(ema200) else bool(close > ema50)
 
+    atr, atr_ma20 = latest.get("atr"), latest.get("atr_ma20")
+    atr_ok = bool(atr > atr_ma20) if not pd.isna(atr_ma20) else False
+
     signals = {
         "MACD": bool(latest.get("macd") > latest.get("macd_signal")),
         "RSI": bool(latest.get("rsi") >= 55),
@@ -151,7 +213,7 @@ def predicta_v4_confluence(latest: pd.Series) -> Tuple[int, Dict[str, bool]]:
         "DELTA": bool(latest.get("delta_proxy", 0) > 0),
         "TREND": trend_ok,
         "ADX": bool(latest.get("adx") >= 20),
-        "ATR": bool(latest.get("atr") > 0),
+        "ATR": atr_ok,
     }
     return int(sum(signals.values())), signals
 
@@ -181,11 +243,28 @@ def detect_swing_failure(df: pd.DataFrame, lookback: int = 20) -> bool:
     last = df.iloc[-1]
     return bool((last["Low"] < swing_low) and (last["Close"] > swing_low) and (last["Close"] > last["Open"]))
 
-def detect_ipo_base(symbol: str) -> bool:
+def detect_ipo_base(symbol: str, df: pd.DataFrame) -> bool:
     try:
-        info = yf.Ticker(symbol).info or {}
-        first_trade = info.get("firstTradeDateEpochUtc")
-        if not first_trade: return False
+        first_trade = db_cache.get_ipo_epoch(symbol)
+        if first_trade is None:
+            if not df.empty and len(df) > 0:
+                oldest_date = df.index[0]
+                if hasattr(oldest_date, "date"):
+                    oldest_date = oldest_date.date()
+                if (dt.date.today() - oldest_date).days > 365:
+                    db_cache.set_ipo_epoch(symbol, 0)
+                    return False
+
+            info = yf.Ticker(symbol).info or {}
+            first_trade = info.get("firstTradeDateEpochUtc")
+            if first_trade is not None:
+                db_cache.set_ipo_epoch(symbol, int(first_trade))
+            else:
+                db_cache.set_ipo_epoch(symbol, -1)
+        
+        if first_trade is None or first_trade <= 0:
+            return False
+            
         ipo_date = dt.datetime.utcfromtimestamp(int(first_trade)).date()
         return (dt.date.today() - ipo_date).days <= 365
     except: return False
@@ -194,6 +273,46 @@ def calculate_rs_raw(df: pd.DataFrame) -> float:
     def get_ret(p):
         return (df["Close"].iloc[-1] / df["Close"].iloc[-p-1] - 1) if len(df) > p else 0
     return float(0.4*get_ret(63) + 0.2*get_ret(126) + 0.4*get_ret(252))
+
+def calculate_pre_circuit_score(df: pd.DataFrame) -> int:
+    if len(df) < 20: return 0
+    try:
+        latest = df.iloc[-1]
+        prev = df.iloc[-2]
+        
+        close, high, low = latest["Close"], latest["High"], latest["Low"]
+        vol, vol_ma20 = latest["Volume"], latest["vol_ma20"]
+        
+        # 1. Close Range (CLV)
+        hl_range = high - low
+        clv = ((close - low) / hl_range) if hl_range > 0 else 0
+        clv_score = 0
+        if clv >= 0.9: clv_score = 3
+        elif clv >= 0.8: clv_score = 2
+        elif clv >= 0.7: clv_score = 1
+        
+        # 2. Volume Multiplier
+        vol_mult = vol / vol_ma20 if vol_ma20 > 0 else 0
+        vol_score = 0
+        if vol_mult >= 3.0: vol_score = 3
+        elif vol_mult >= 2.0: vol_score = 2
+        elif vol_mult >= 1.5: vol_score = 1
+        
+        # 3. Daily Change
+        prev_close = prev["Close"]
+        pct_change = ((close - prev_close) / prev_close) * 100.0 if prev_close > 0 else 0
+        change_score = 0
+        if 5.0 <= pct_change < 15.0: change_score = 2
+        elif 3.0 <= pct_change < 5.0: change_score = 1
+        
+        # 4. Volatility Contraction Check (Narrowing relative range)
+        range_5 = ((df["High"] - df["Low"]) / df["Close"] * 100.0).tail(5).mean()
+        range_20 = ((df["High"] - df["Low"]) / df["Close"] * 100.0).tail(20).mean()
+        vcp_score = 2 if range_5 < range_20 else 0
+        
+        return clv_score + vol_score + change_score + vcp_score
+    except Exception:
+        return 0
 
 # ============================================================
 # 5) FUNDAMENTALS (CACHED & PARALLEL)
@@ -260,7 +379,11 @@ def run_full_system(
     interval: str = "1d",
     top_n: int = 10,
     start_index: int = 0,
-    manual_symbols: Optional[List[str]] = None
+    manual_symbols: Optional[List[str]] = None,
+    filter_minervini: bool = False,
+    filter_vcp: bool = False,
+    filter_sfp: bool = False,
+    filter_ipo: bool = False
 ) -> pd.DataFrame:
     if manual_symbols:
         stocks = [s.upper().strip() for s in manual_symbols if s.strip()]
@@ -268,61 +391,78 @@ def run_full_system(
         all_stocks = get_nse_stocks()
         stocks = all_stocks[start_index : start_index + (universe_limit or len(all_stocks))]
     
+    try:
+        rich_stocks = {s["symbol"]: s["name"] for s in get_nse_stocks_rich()}
+    except Exception:
+        rich_stocks = {}
     counters = {"total_universe": len(stocks), "scanned": 0, "passed_filter": 0, "errors": 0}
 
-    print(f"Hyper-Scanning {len(stocks)} symbols in chunks...")
+    print(f"Hyper-Scanning {len(stocks)} symbols...")
     candidates = []
-    chunk_size = 50
-    import gc
     
-    for i in range(0, len(stocks), chunk_size):
-        chunk = stocks[i : i + chunk_size]
+    # Force download at least 2y of history to calculate indicators accurately
+    download_period = period
+    if period in ["6mo", "1y"]:
+        download_period = "2y"
+
+    try:
+        bulk_df = yf.download(tickers=" ".join(stocks), period=download_period, interval=interval, group_by="ticker", threads=20, progress=False)
+    except Exception as e:
+        print(f"Bulk download failed: {e}")
+        bulk_df = pd.DataFrame()
+
+    for sym in tqdm(stocks, desc="Analyzing Market Data"):
+        counters["scanned"] += 1
         try:
-            # Use a conservative thread count per chunk
-            bulk_df = yf.download(tickers=" ".join(chunk), period=period, interval=interval, group_by="ticker", threads=10, progress=False)
-        except Exception as e:
-            print(f"Chunk download failed: {e}")
-            bulk_df = pd.DataFrame()
-
-        for sym in tqdm(chunk, desc=f"Analyzing Chunk {i//chunk_size + 1}"):
-            counters["scanned"] += 1
-            try:
-                if sym not in bulk_df.columns.levels[0]: continue
-                df = bulk_df[sym].dropna(how="all").copy()
-                if len(df) < 90: continue
-
-                df = add_technical_indicators(normalize_ohlcv_df(df))
-                latest = df.iloc[-1]
-                conf_score, conf_sigs = predicta_v4_confluence(latest)
-                
-                # If manual search, bypass the score filter so user can see the data
-                if not manual_symbols and conf_score < min_confluence_score:
+            if bulk_df.empty:
+                continue
+            if isinstance(bulk_df.columns, pd.MultiIndex):
+                if sym not in bulk_df.columns.levels[0]:
                     continue
+                df = bulk_df[sym].dropna(how="all").copy()
+            else:
+                df = bulk_df.dropna(how="all").copy()
+            if len(df) < 90: continue
 
-                counters["passed_filter"] += 1
-                vcp = detect_vcp(df)
-                sfp = detect_swing_failure(df)
-                ipo = detect_ipo_base(sym)
-                minervini = detect_minervini_trend(df)
-                rs_raw = calculate_rs_raw(df)
-                
-                setup_score = (2 if vcp else 0) + (2 if sfp else 0) + (1 if ipo else 0) + (1 if minervini else 0)
-                row = {
-                    "Symbol": sym, "Score": conf_score + setup_score,
-                    "ConfluenceScore": conf_score, "SetupScore": setup_score,
-                    "Minervini": minervini, "VCP": vcp, "SFP": sfp, "IPO_BASE": ipo,
-                    "Price": float(latest["Close"]),
-                    "RSI": float(latest["rsi"]), "VolMult": float(latest["vol_mult"]),
-                    "ADR%": float(latest["adrp20"]), "RVol": float(latest["rvol50"]),
-                    **{f"C_{k}": v for k, v in conf_sigs.items()}
-                }
-                candidates.append(Candidate(sym, row["Score"], row["Price"], rs_raw, row))
-            except:
-                counters["errors"] += 1
-        
-        # Explicitly clear chunk data and collect garbage to keep memory usage low
-        del bulk_df
-        gc.collect()
+            df = add_technical_indicators(normalize_ohlcv_df(df))
+            latest = df.iloc[-1]
+            conf_score, conf_sigs = predicta_v4_confluence(latest)
+            
+            # If manual search, bypass the score filter so user can see the data
+            if not manual_symbols and conf_score < min_confluence_score:
+                continue
+
+            vcp = detect_vcp(df)
+            sfp = detect_swing_failure(df)
+            ipo = detect_ipo_base(sym, df)
+            minervini = detect_minervini_trend(df)
+
+            if filter_minervini and not minervini: continue
+            if filter_vcp and not vcp: continue
+            if filter_sfp and not sfp: continue
+            if filter_ipo and not ipo: continue
+
+            counters["passed_filter"] += 1
+            rs_raw = calculate_rs_raw(df)
+            pre_circuit_score = calculate_pre_circuit_score(df)
+            setup_score = (2 if vcp else 0) + (2 if sfp else 0) + (1 if ipo else 0) + (1 if minervini else 0)
+            row = {
+                "Symbol": sym, "Name": rich_stocks.get(sym, "NSE Equity Ticker"), "Score": conf_score + setup_score,
+                "ConfluenceScore": conf_score, "SetupScore": setup_score,
+                "PreCircuitScore": pre_circuit_score,
+                "Minervini": minervini, "VCP": vcp, "SFP": sfp, "IPO_BASE": ipo,
+                "Price": float(latest["Close"]),
+                "RSI": float(latest["rsi"]), "VolMult": float(latest["vol_mult"]),
+                "ADR%": float(latest["adrp20"]), "RVol": float(latest["rvol50"]),
+                **{f"C_{k}": v for k, v in conf_sigs.items()}
+            }
+            candidates.append(Candidate(sym, row["Score"], row["Price"], rs_raw, row))
+        except:
+            counters["errors"] += 1
+    
+    del bulk_df
+    import gc
+    gc.collect()
 
     if not candidates: return pd.DataFrame()
 

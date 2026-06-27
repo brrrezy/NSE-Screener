@@ -3,7 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NSE Swing Screener | Institutional Terminal</title>
+    <title>NSE Stock Screener & Swing Stocks Finder | Swing Stocks Terminal</title>
+    
+    <!-- Core SEO Meta Tags -->
+    <meta name="description" content="The best Indian stock screener and swing stocks finder. Scan high-momentum swing stocks, VCP patterns, IPO bases, etc. using Predicta Multi-Factor quantitative models.">
+    <meta name="keywords" content="stock screener, swing stocks finder, swing stocks, swing trading, NSE, Indian stock market, technical analysis, VCP pattern, Minervini trend, Predicta model, etc">
+    <meta name="author" content="Shivanshu">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://findswingstocks.up.railway.app/">
+
+    <!-- Open Graph / Social Media Preview Meta Tags -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="NSE Stock Screener & Swing Stocks Finder">
+    <meta property="og:description" content="The best Indian stock screener and swing stocks finder. Scan high-momentum swing stocks, VCP patterns, and IPO bases.">
+    <meta property="og:url" content="https://findswingstocks.up.railway.app/">
+    <meta property="og:image" content="https://findswingstocks.up.railway.app/assets/og-image.png">
+
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="NSE Stock Screener & Swing Stocks Finder">
+    <meta name="twitter:description" content="The best Indian stock screener and swing stocks finder. Scan high-momentum swing stocks, VCP patterns, and IPO bases.">
+    <meta name="twitter:image" content="https://findswingstocks.up.railway.app/assets/og-image.png">
+
+    <!-- JSON-LD Structured Data Schema for Google -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "NSE Stock Screener & Swing Stocks Finder",
+      "alternateName": "NSE Swing Screener",
+      "url": "https://findswingstocks.up.railway.app/",
+      "image": "https://findswingstocks.up.railway.app/assets/og-image.png",
+      "description": "The best Indian stock screener and swing stocks finder. Scan high-momentum swing stocks, VCP patterns, and IPO bases with quantitative models.",
+      "applicationCategory": "FinanceApplication",
+      "operatingSystem": "All",
+      "browserRequirements": "Requires HTML5, Javascript, CSS",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "INR"
+      },
+      "featureList": [
+        "VCP Breakout Scanner",
+        "Minervini Trend Template Filter",
+        "Swing Failure Setup Scanner",
+        "Pre-Circuit Predictive Score Model",
+        "Predicta Quantitative Multi-Factor Score",
+        "Rich Autocomplete Search by Company Name"
+      ]
+    }
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -76,6 +126,34 @@
                     </div>
                 </div>
                 
+                <div class="sidebar-section">
+                    <label class="section-label">Setup Filters</label>
+                    <div class="checkbox-group" style="margin-bottom: 0.75rem;">
+                        <label class="checkbox-container" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.8rem; color: var(--text-secondary);">
+                            <input type="checkbox" id="minervini" name="minervini" value="true" style="width: auto; cursor: pointer;">
+                            <span class="checkbox-label">Minervini Trend</span>
+                        </label>
+                    </div>
+                    <div class="checkbox-group" style="margin-bottom: 0.75rem;">
+                        <label class="checkbox-container" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.8rem; color: var(--text-secondary);">
+                            <input type="checkbox" id="vcp" name="vcp" value="true" style="width: auto; cursor: pointer;">
+                            <span class="checkbox-label">VCP Setup</span>
+                        </label>
+                    </div>
+                    <div class="checkbox-group" style="margin-bottom: 0.75rem;">
+                        <label class="checkbox-container" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.8rem; color: var(--text-secondary);">
+                            <input type="checkbox" id="sfp" name="sfp" value="true" style="width: auto; cursor: pointer;">
+                            <span class="checkbox-label">SFP (Swing Failure)</span>
+                        </label>
+                    </div>
+                    <div class="checkbox-group" style="margin-bottom: 0.75rem;">
+                        <label class="checkbox-container" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.8rem; color: var(--text-secondary);">
+                            <input type="checkbox" id="ipo" name="ipo" value="true" style="width: auto; cursor: pointer;">
+                            <span class="checkbox-label">IPO Base</span>
+                        </label>
+                    </div>
+                </div>
+                
                 <button type="submit" id="run-btn" class="btn-primary">
                     <span class="btn-text">Initialize Scan</span>
                     <i class="fas fa-chevron-right"></i>
@@ -93,8 +171,8 @@
         <main class="main-content">
             <header class="top-bar">
                 <div class="header-left">
-                    <div class="breadcrumb">Dashboard / Swing Screener</div>
-                    <h1>NSE Swing Screener</h1>
+                    <div class="breadcrumb">Dashboard / Stock Screener & Swing Stocks Finder</div>
+                    <h1>NSE Stock Screener & Swing Stocks Finder</h1>
                 </div>
                 <div class="header-right">
                     <div class="status-indicator">
@@ -223,6 +301,70 @@
             <div class="loading-text-container">
                 <p class="main-loading">Executing Predicta Scan</p>
                 <span id="loading-msg">Synthesizing market data...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Details Drawer -->
+    <div class="details-drawer" id="details-drawer">
+        <div class="drawer-header">
+            <div class="drawer-title-container">
+                <h3 id="drawer-ticker">Ticker Details</h3>
+                <span id="drawer-name" class="drawer-company-name">Company Name</span>
+            </div>
+            <button id="close-drawer-btn" class="close-drawer-btn">&times;</button>
+        </div>
+        <div class="drawer-body">
+            <!-- Price and general stats -->
+            <div class="drawer-section main-stats">
+                <div class="stat-box-large">
+                    <span class="stat-label">LTP (Close)</span>
+                    <span class="stat-value" id="drawer-price">₹0.00</span>
+                </div>
+                <div class="stat-box-large">
+                    <span class="stat-label">Predicta Score</span>
+                    <span class="stat-value highlight" id="drawer-score">0/13</span>
+            </div>
+
+            <!-- Pre-Circuit Momentum Predictor -->
+            <div class="drawer-section">
+                <h4 class="section-subtitle">Next-Day Circuit Target</h4>
+                <div class="circuit-predictor-container" id="drawer-circuit-indicator" style="padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: rgba(255,255,255,0.01);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <span style="font-size: 0.75rem; font-weight: 500; color: var(--text-secondary);">Pre-Circuit Score</span>
+                        <span id="drawer-circuit-score" style="font-family: var(--font-mono); font-size: 0.85rem; font-weight: 700;">0/10</span>
+                    </div>
+                    <div class="progress-bar-bg" style="width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; margin-bottom: 0.75rem;">
+                        <div id="drawer-circuit-progress" style="width: 0%; height: 100%; background: var(--text-muted); border-radius: 3px; transition: width 0.3s ease;"></div>
+                    </div>
+                    <div id="drawer-circuit-banner" class="alert-banner" style="display: none; justify-content: center; align-items: center; gap: 0.5rem; padding: 0.5rem; border-radius: var(--radius-sm); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); color: #c084fc; text-align: center;">
+                        <i class="fas fa-bolt"></i> PRE-CIRCUIT BREAKOUT TARGET
+                    </div>
+                </div>
+            </div>
+
+            <!-- Setups flags -->
+            <div class="drawer-section">
+                <h4 class="section-subtitle">Active Setups</h4>
+                <div class="setups-flex" id="drawer-setups">
+                    <!-- Setup badges go here -->
+                </div>
+            </div>
+
+            <!-- Technical checklist -->
+            <div class="drawer-section">
+                <h4 class="section-subtitle">Predicta Confluence Breakdown</h4>
+                <ul class="checklist-grid" id="drawer-confluence-list">
+                    <!-- Confluence items go here -->
+                </ul>
+            </div>
+
+            <!-- Fundamental health -->
+            <div class="drawer-section">
+                <h4 class="section-subtitle">Fundamental Health Metrics</h4>
+                <div class="fundamentals-grid" id="drawer-fundamentals">
+                    <!-- Fundamental metrics go here -->
+                </div>
             </div>
         </div>
     </div>
